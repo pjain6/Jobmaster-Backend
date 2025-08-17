@@ -1,45 +1,58 @@
 # scraper.py
-# SOPHISTICATED VERSION
-# Fetches multiple pages of results and prepares for AI analysis.
+# FINAL, PRODUCTION-READY VERSION
+# Uses the Adzuna Job Board API for reliable, structured data.
 
 import requests
 import json
-import time
 
-# --- YOUR ADZUNA API CREDENTIALS ---
+# --- PASTE YOUR ADZUNA API CREDENTIALS HERE ---
 ADZUNA_APP_ID = "96373f58"
 ADZUNA_APP_KEY = "63d4d6ca5bf5353fcaf2398c68bd8433"
 
-def fetch_jobs_from_api(query, page=1):
+def fetch_jobs_from_api(query, location=None, salary_min=None, experience=None, page=1):
     """
-    Fetches a single page of job listings from the Adzuna API.
+    Fetches job listings from the Adzuna API, now with salary and experience filtering.
     """
-    print(f"  -> Sending request for '{query}' (Page {page}) to Adzuna API...")
+    print(f"  -> Sending request for '{query}' in '{location or 'anywhere'}' to Adzuna API...")
+
+    # Adzuna API endpoint details
     url_endpoint = f"http://api.adzuna.com/v1/api/jobs/us/search/{page}"
     
     params = {
         'app_id': ADZUNA_APP_ID,
         'app_key': ADZUNA_APP_KEY,
         'what': query,
-        'results_per_page': 50, # Ask for the max number of results per page
+        'results_per_page': 50, # Get a good number of results
         'content-type': 'application/json'
     }
 
+    # --- ADDING THE NEW FILTERS ---
+    if location:
+        params['where'] = location
+    if salary_min:
+        params['salary_min'] = salary_min
+    if experience and experience in ['entry-level', 'junior']:
+        # Adzuna's experience filtering is limited. A more complex system might use
+        # keywords in the 'what' query, but for now, we add the parameter if present.
+        # This demonstrates how the AI's output is used.
+        params['what_and'] = experience # Adds the experience level as a required keyword
+
     try:
         response = requests.get(url_endpoint, params=params)
-        response.raise_for_status()
+        response.raise_for_status() # Raise an exception for bad status codes
         
         data = response.json()
         api_results = data.get('results', [])
 
         jobs_list = []
         for job_data in api_results:
+            # Map the Adzuna API response to our application's job format
             job = {
                 "id": job_data.get('id'),
                 "title": job_data.get('title'),
                 "company": job_data.get('company', {}).get('display_name', 'N/A'),
                 "location": job_data.get('location', {}).get('display_name', 'N/A'),
-                "salary": "N/A",
+                "salary": "N/A", # Salary data can be complex in Adzuna, keeping it simple for now
                 "description": job_data.get('description', 'See original posting for details.'),
                 "link": job_data.get('redirect_url')
             }
@@ -54,72 +67,9 @@ def fetch_jobs_from_api(query, page=1):
         print(f"  -> An unexpected error occurred: {e}")
         return []
 
-def analyze_job_with_ai(job_description):
-    """
-    *** AI INTEGRATION POINT (SIMULATED) ***
-    In a real system, this function would send the job description to an AI model
-    (like Gemini) to extract structured data. For now, we simulate this.
-    """
-    # Simulate extracting keywords. A real AI would be much more accurate.
-    keywords = []
-    description_lower = job_description.lower()
-    if 'python' in description_lower: keywords.append('Python')
-    if 'react' in description_lower: keywords.append('React')
-    if 'sql' in description_lower: keywords.append('SQL')
-    if 'agile' in description_lower: keywords.append('Agile')
-    if 'aws' in description_lower: keywords.append('AWS')
-    if 'sales' in description_lower: keywords.append('Sales')
-    
-    # Simulate identifying experience level
-    level = 'Mid-Level'
-    if 'senior' in description_lower or 'lead' in description_lower:
-        level = 'Senior'
-    elif 'junior' in description_lower or 'entry' in description_lower:
-        level = 'Entry-Level'
-        
-    return {
-        "skills": keywords,
-        "level": level
-    }
-
+# The main block below is no longer used by the live server, but is kept for manual data fetching.
 if __name__ == '__main__':
-    print("Starting the advanced job data fetcher...")
-    
-    # Expand our queries to get a wider range of jobs
-    queries = [
-        "python developer", "sales manager", "react developer", "data analyst", 
-        "project manager", "software engineer", "marketing manager", "devops engineer",
-        "graphic designer", "customer support"
-    ]
-    all_jobs = []
-    
-    for query in queries:
-        print(f"Fetching data for: '{query}'")
-        # --- PAGINATION LOGIC ---
-        # We'll fetch up to 5 pages of results for each query.
-        for page_num in range(1, 6): 
-            jobs = fetch_jobs_from_api(query, page=page_num)
-            if jobs:
-                all_jobs.extend(jobs)
-                print(f"  -> Page {page_num}: Found {len(jobs)} jobs.")
-            else:
-                # If a page has no results, no need to check the next ones
-                print(f"  -> Page {page_num}: No more results.")
-                break
-            time.sleep(1) # Be polite to the API and wait a second between requests
-            
-    print(f"\nTotal jobs fetched: {len(all_jobs)}. Now analyzing with AI...")
-    
-    # --- AI ANALYSIS STEP ---
-    analyzed_jobs = []
-    for job in all_jobs:
-        ai_analysis = analyze_job_with_ai(job['title'] + ' ' + job['description'])
-        job['ai_analysis'] = ai_analysis # Add the new AI data to our job object
-        analyzed_jobs.append(job)
-        
-    unique_jobs = {job['id']: job for job in analyzed_jobs}
-    
-    with open("jobs.json", "w") as f:
-        json.dump(list(unique_jobs.values()), f, indent=4)
-        
-    print(f"\nProcess complete. Saved {len(unique_jobs)} unique, AI-analyzed jobs to jobs.json")
+    if ADZUNA_APP_ID == "YOUR_APP_ID_HERE" or ADZUNA_APP_KEY == "YOUR_APP_KEY_HERE":
+        print("\nERROR: Please paste your Adzuna App ID and App Key into the scraper.py file.\n")
+    else:
+        print("This script is now intended to be used by app.py. To run a manual fetch, you would call the functions directly.")
