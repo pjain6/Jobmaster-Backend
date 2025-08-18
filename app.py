@@ -1,6 +1,6 @@
 # app.py
-# GEMINI AI-POWERED VERSION
-# This server uses the Gemini API to understand user queries.
+# GEMINI AI-POWERED VERSION V2
+# This server now includes an endpoint to expand job description snippets using AI.
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
@@ -8,7 +8,6 @@ import google.generativeai as genai
 import json
 import os
 
-# We now import the function that calls the Adzuna API
 from scraper import fetch_jobs_from_api, ADZUNA_APP_ID, ADZUNA_APP_KEY
 
 app = Flask(__name__)
@@ -26,8 +25,6 @@ def parse_query_with_ai(query):
     """
     print(f"  -> Sending query to Gemini AI: '{query}'")
     
-    # --- UPGRADED AI PROMPT ---
-    # We now ask the AI to extract salary and experience level as well.
     prompt = f"""
     Analyze the following job search query and extract up to four pieces of information:
     1. The job role.
@@ -45,16 +42,13 @@ def parse_query_with_ai(query):
 
     try:
         response = model.generate_content(prompt)
-        
         json_text = response.text.strip().replace('```json', '').replace('```', '').strip()
-        
         structured_query = json.loads(json_text)
         print(f"  -> Gemini AI structured result: {structured_query}")
         return structured_query
         
     except Exception as e:
         print(f"  -> Gemini API error or JSON parsing failed: {e}")
-        # Fallback to a simple structure if the AI fails
         return {"role": query, "location": None, "salary_min": None, "experience_level": None}
 
 
@@ -69,26 +63,17 @@ def search_jobs():
     if not query:
         return jsonify({"error": "A search query 'q' is required."}), 400
 
-    if GEMINI_API_KEY == "YOUR_GEMINI_API_KEY_HERE":
-        print("ERROR: Gemini API key is not set.")
-        return jsonify({"error": "Server is not configured with AI credentials."}), 500
-
     print(f"Received live search query: '{query}'.")
-    
-    # --- STEP 1: AI QUERY ANALYSIS ---
     ai_structured_query = parse_query_with_ai(query)
     
-    # --- STEP 2: PRECISE API CALL ---
     role_query = ai_structured_query.get("role")
     location_query = ai_structured_query.get("location")
     salary_query = ai_structured_query.get("salary_min")
     experience_query = ai_structured_query.get("experience_level")
     
     if not role_query:
-        print(" -> AI could not determine a role, using full query.")
         role_query = query
         
-    # Pass all extracted data to the API function for a highly specific search
     live_jobs = fetch_jobs_from_api(
         role_query, 
         location=location_query, 
@@ -98,8 +83,44 @@ def search_jobs():
     )
     
     print(f"Found {len(live_jobs)} jobs from Adzuna API.")
-    
     return jsonify(live_jobs)
+
+
+# --- NEW AI ENDPOINT FOR EXPANDING DESCRIPTIONS ---
+@app.route('/api/job/expand', methods=['POST'])
+def expand_job_description():
+    """
+    Receives a job snippet and uses Gemini to expand it into a full description.
+    """
+    data = request.get_json()
+    snippet = data.get('description')
+
+    if not snippet:
+        return jsonify({"error": "Description snippet is required."}), 400
+
+    print(f"  -> Received snippet to expand. Sending to Gemini...")
+
+    prompt = f"""
+    Based on the following job description snippet, please expand it into a plausible, well-formatted, and detailed job description of about 3-4 paragraphs.
+    Elaborate on the likely duties, qualifications, and company culture implied by the snippet.
+    Do not invent wildly different responsibilities. The tone should be professional.
+    Do not include a title or company name in your response, only the expanded description text.
+
+    Snippet: "{snippet}"
+
+    Expanded Description:
+    """
+
+    try:
+        response = model.generate_content(prompt)
+        expanded_description = response.text.strip()
+        print("  -> Successfully expanded description with AI.")
+        return jsonify({"full_description": expanded_description})
+    except Exception as e:
+        print(f"  -> Gemini API error during expansion: {e}")
+        # If AI fails, just return the original snippet
+        return jsonify({"full_description": snippet})
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5001, debug=True)
