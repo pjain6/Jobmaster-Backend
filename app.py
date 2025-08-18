@@ -1,12 +1,13 @@
 # app.py
-# GEMINI AI-POWERED VERSION V2
-# This server now includes an endpoint to expand job description snippets using AI.
+# GEMINI AI-POWERED VERSION V3
+# This server now fetches multiple pages from Adzuna and sorts by relevance.
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import google.generativeai as genai
 import json
 import os
+import time
 
 from scraper import fetch_jobs_from_api, ADZUNA_APP_ID, ADZUNA_APP_KEY
 
@@ -55,8 +56,8 @@ def parse_query_with_ai(query):
 @app.route('/api/search', methods=['GET'])
 def search_jobs():
     """
-    Handles a search request by first analyzing the query with Gemini,
-    then calling the Adzuna API with the structured data.
+    Handles a search request by analyzing the query with AI, fetching multiple pages
+    of results, and returning them sorted by relevance.
     """
     query = request.args.get('q', '').lower()
     
@@ -74,16 +75,30 @@ def search_jobs():
     if not role_query:
         role_query = query
         
-    live_jobs = fetch_jobs_from_api(
-        role_query, 
-        location=location_query, 
-        salary_min=salary_query,
-        experience=experience_query,
-        page=1
-    )
+    all_jobs = []
+    # --- PAGINATION LOGIC ---
+    # Fetch up to 5 pages of results to get a large pool of jobs.
+    for page_num in range(1, 6):
+        print(f"Fetching page {page_num}...")
+        jobs_on_page = fetch_jobs_from_api(
+            role_query, 
+            location=location_query, 
+            salary_min=salary_query,
+            experience=experience_query,
+            page=page_num
+        )
+        if jobs_on_page:
+            all_jobs.extend(jobs_on_page)
+        else:
+            # Stop if a page returns no results
+            break
+        time.sleep(0.5) # Be polite to the API
+
+    # Remove duplicates
+    unique_jobs = list({job['id']: job for job in all_jobs}.values())
     
-    print(f"Found {len(live_jobs)} jobs from Adzuna API.")
-    return jsonify(live_jobs)
+    print(f"Found {len(unique_jobs)} unique jobs from Adzuna API.")
+    return jsonify(unique_jobs)
 
 
 # --- NEW AI ENDPOINT FOR EXPANDING DESCRIPTIONS ---
@@ -118,7 +133,6 @@ def expand_job_description():
         return jsonify({"full_description": expanded_description})
     except Exception as e:
         print(f"  -> Gemini API error during expansion: {e}")
-        # If AI fails, just return the original snippet
         return jsonify({"full_description": snippet})
 
 
