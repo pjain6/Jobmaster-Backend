@@ -1,6 +1,6 @@
 # app.py
-# FINAL CORRECTED VERSION
-# This server correctly handles the 'wakeup' call and uses the updated scraper.
+# FINAL VERSION
+# This server is now cleaner, with the redundant /expand endpoint removed.
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
@@ -63,7 +63,6 @@ def search_jobs():
     if not query:
         return jsonify({"error": "A search query 'q' is required."}), 400
 
-    # --- THIS IS THE FIX for the 'wakeup' call ---
     if query == 'wakeup':
         print("Received wakeup call. Returning empty list.")
         return jsonify([])
@@ -75,41 +74,6 @@ def search_jobs():
     
     print(f"Found {len(live_jobs)} jobs from JobsPikr.")
     return jsonify(live_jobs)
-
-
-# --- AI ENDPOINT FOR EXPANDING DESCRIPTIONS ---
-@app.route('/api/job/expand', methods=['POST'])
-def expand_job_description():
-    """
-    Receives a job snippet and uses Gemini to expand it into a full description.
-    """
-    data = request.get_json()
-    snippet = data.get('description')
-
-    if not snippet:
-        return jsonify({"error": "Description snippet is required."}), 400
-
-    print(f"  -> Received snippet to expand. Sending to Gemini...")
-
-    prompt = f"""
-    Based on the following job description snippet, please expand it into a plausible, well-formatted, and detailed job description of about 3-4 paragraphs.
-    Elaborate on the likely duties, qualifications, and company culture implied by the snippet.
-    Do not invent wildly different responsibilities. The tone should be professional.
-    Do not include a title or company name in your response, only the expanded description text.
-
-    Snippet: "{snippet}"
-
-    Expanded Description:
-    """
-
-    try:
-        response = model.generate_content(prompt)
-        expanded_description = response.text.strip()
-        print("  -> Successfully expanded description with AI.")
-        return jsonify({"full_description": expanded_description})
-    except Exception as e:
-        print(f"  -> Gemini API error during expansion: {e}")
-        return jsonify({"full_description": snippet})
 
 
 if __name__ == '__main__':
