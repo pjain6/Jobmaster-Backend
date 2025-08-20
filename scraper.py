@@ -1,50 +1,66 @@
 # scraper.py
-# This file now contains the client function for the JobsPikr API.
+# This file now contains the client function for the JobsPikr API,
+# updated according to the official documentation.
 
 import requests
 import json
 import os
 
 # --- API CREDENTIALS ---
-# This will be stored as an Environment Variable on Render
-JOBSPIKR_API_KEY = os.environ.get("JOBSPIKR_API_KEY", "uF43fN8RnG_3zmGiMOtiwfk24DaickrENAYjuRZ2OTc")
+# These will be stored as Environment Variables on Render
+JOBSPIKR_CLIENT_ID = os.environ.get("JOBSPIKR_CLIENT_ID", "jobma_jp_fcc0819ad1")
+JOBSPIKR_AUTH_KEY = os.environ.get("JOBSPIKR_AUTH_KEY", "uF43fN8RnG_3zmGiMOtiwfk24DaickrENAYjuRZ2OTc")
 
 
 def fetch_jobspikr_jobs(query_data):
     """
-    Fetches job listings from the JobsPikr Real-Time API.
+    Fetches job listings from the JobsPikr API using the correct authentication and endpoints.
     """
     print(f"  -> Querying JobsPikr API for: {query_data}")
     
-    # This is a standard endpoint structure for a service like JobsPikr.
-    # You may need to adjust it based on their specific documentation.
-    url = "https://api.jobspikr.com/v2/jobs"
+    # Use the correct endpoint for job data
+    url = "https://api.jobspikr.com/v2/data"
     
-    # Construct the payload for the API based on our AI's analysis
-    params = {
-        "api_key": JOBSPIKR_API_KEY,
-        "query": query_data.get("role", ""),
-        "location": query_data.get("location", ""),
-        "size": 100 # Fetch up to 100 results
+    # --- CORRECT AUTHENTICATION METHOD ---
+    # Provide credentials in the request headers
+    headers = {
+        'client_id': JOBSPIKR_CLIENT_ID,
+        'client_auth_key': JOBSPIKR_AUTH_KEY,
+        'Content-Type': 'application/json'
+    }
+    
+    # --- CORRECT QUERY STRUCTURE ---
+    # Build the specific search_query_json object that JobsPikr requires
+    search_query = {
+        "query_string": {
+            "query": query_data.get("role", "")
+        }
+    }
+    
+    # Construct the full payload for the POST request
+    payload = {
+        "search_query_json": json.dumps(search_query), # The query must be a JSON string
+        "size": 100
     }
 
     try:
-        # Make the API call
-        response = requests.get(url, params=params)
+        # --- USE POST REQUEST ---
+        # Make the API call using POST as recommended
+        response = requests.post(url, headers=headers, json=payload)
         response.raise_for_status()
         
-        api_results = response.json().get('jobs', [])
+        api_results = response.json().get('job_data', [])
 
         jobs_list = []
         for job_data in api_results:
             # Normalize the data to our app's format
             job = {
-                "id": job_data.get('id'),
-                "title": job_data.get('title'),
+                "id": job_data.get('uniq_id'),
+                "title": job_data.get('job_title'),
                 "company": job_data.get('company_name', 'N/A'),
-                "location": job_data.get('location_normalized', 'N/A'),
-                "description": job_data.get('job_description_html', 'See original posting.'), # Use the full description
-                "link": job_data.get('job_url')
+                "location": job_data.get('inferred_city', 'N/A') + ", " + job_data.get('inferred_state', ''),
+                "description": job_data.get('html_job_description', 'See original posting.'), # Use the full HTML description
+                "link": job_data.get('url')
             }
             jobs_list.append(job)
         return jobs_list
