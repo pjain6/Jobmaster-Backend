@@ -1,6 +1,6 @@
 # app.py
-# AGGREGATOR VERSION - CORRECTED
-# This server calls the powerful JobsPikr API and correctly imports the function.
+# FINAL CORRECTED VERSION
+# This server correctly handles the 'wakeup' call and uses the updated scraper.
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
@@ -8,8 +8,6 @@ import google.generativeai as genai
 import json
 import os
 
-# --- THIS IS THE FIX ---
-# We now import the correct function name from scraper.py
 from scraper import fetch_jobspikr_jobs
 
 app = Flask(__name__)
@@ -65,11 +63,14 @@ def search_jobs():
     if not query:
         return jsonify({"error": "A search query 'q' is required."}), 400
 
+    # --- THIS IS THE FIX for the 'wakeup' call ---
+    if query == 'wakeup':
+        print("Received wakeup call. Returning empty list.")
+        return jsonify([])
+
     print(f"Received live search query: '{query}'.")
     ai_structured_query = parse_query_with_ai(query)
     
-    # --- THIS IS THE FIX ---
-    # We now call the correct function.
     live_jobs = fetch_jobspikr_jobs(ai_structured_query)
     
     print(f"Found {len(live_jobs)} jobs from JobsPikr.")

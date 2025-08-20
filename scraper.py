@@ -28,17 +28,17 @@ def fetch_jobspikr_jobs(query_data):
     role = query_data.get("role")
     location = query_data.get("location")
 
-    # --- THIS IS THE FIX ---
     # If there's no role (like in a 'wakeup' call), don't make an invalid API request.
     if not role:
         return []
 
+    # --- THIS IS THE FIX ---
     # Build the complex Elasticsearch query that JobsPikr requires.
     must_clauses = [
         {
             "query_string": {
-                "query": role,
-                "default_field": "job_title"
+                "query": f'"{role}"', # Use quotes for phrase matching
+                "fields": ["job_title", "inferred_job_title"]
             }
         }
     ]
@@ -46,8 +46,8 @@ def fetch_jobspikr_jobs(query_data):
     if location:
         must_clauses.append({
             "query_string": {
-                "query": f'"{location}"', # Use quotes for better location matching
-                "fields": ["city", "inferred_city", "state", "inferred_state"]
+                "query": f'"{location}"',
+                "fields": ["city", "inferred_city", "state", "inferred_state", "country", "inferred_country"]
             }
         })
 
