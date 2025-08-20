@@ -58,12 +58,13 @@ def fetch_jobspikr_jobs(query_data):
     }
     
     payload = {
-        "search_query_json": json.dumps(search_query),
+        "search_query_json": search_query, # Pass the JSON object directly
         "size": 100
     }
 
     try:
-        response = requests.post(url, headers=headers, json=payload)
+        # The API expects the body to be a JSON string, so we dump it here.
+        response = requests.post(url, headers=headers, data=json.dumps(payload))
         response.raise_for_status()
         
         api_results = response.json().get('job_data', [])
