@@ -1,14 +1,16 @@
 # app.py
-# FINAL VERSION
-# This server is now cleaner, with the redundant /expand endpoint removed.
+# FINAL AGGREGATOR VERSION
+# This server calls multiple job APIs in parallel and merges the results.
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import google.generativeai as genai
 import json
 import os
+import concurrent.futures
 
-from scraper import fetch_jobspikr_jobs
+# We now import both API client functions
+from scraper import fetch_adzuna_jobs, fetch_jobspikr_jobs
 
 app = Flask(__name__)
 CORS(app)
@@ -55,8 +57,8 @@ def parse_query_with_ai(query):
 @app.route('/api/search', methods=['GET'])
 def search_jobs():
     """
-    Handles a search request by analyzing the query with AI, then calling the 
-    JobsPikr job aggregator to get comprehensive, live results.
+    Handles a search request by analyzing the query, calling multiple job APIs
+    in parallel, and returning a merged, deduplicated list of results.
     """
     query = request.args.get('q', '').lower()
     
@@ -69,11 +71,70 @@ def search_jobs():
 
     print(f"Received live search query: '{query}'.")
     ai_structured_query = parse_query_with_ai(query)
+        
+    all_jobs = []
+    # --- PARALLEL API CALLS ---
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        future_jobspikr = executor.submit(fetch_jobspikr_jobs, ai_structured_query)
+        future_adzuna = executor.submit(fetch_adzuna_jobs, ai_structured_query)
+
+        if future_jobspikr.result():
+            all_jobs.extend(future_jobspikr.result())
+        if future_adzuna.result():
+            all_jobs.extend(future_adzuna.result())
+
+    # --- INTELLIGENT DEDUPLICATION ---
+    # Create a unique "signature" for each job to remove true duplicates.
+    unique_jobs = {}
+    for job in all_jobs:
+        # A signature is a combination of the core job details, lowercased.
+        signature = (
+            job.get('title', '').lower(),
+            job.get('company', '').lower(),
+            job.get('location', '').lower()
+        )
+        if signature not in unique_jobs:
+            unique_jobs[signature] = job
     
-    live_jobs = fetch_jobspikr_jobs(ai_structured_query)
+    final_job_list = list(unique_jobs.values())
     
-    print(f"Found {len(live_jobs)} jobs from JobsPikr.")
-    return jsonify(live_jobs)
+    print(f"Found {len(final_job_list)} unique jobs from all sources.")
+    return jsonify(final_job_list)
+
+
+# --- AI ENDPOINT FOR EXPANDING DESCRIPTIONS ---
+@app.route('/api/job/expand', methods=['POST'])
+def expand_job_description():
+    """
+    Receives a job snippet and uses Gemini to expand it into a full description.
+    """
+    data = request.get_json()
+    snippet = data.get('description')
+
+    if not snippet:
+        return jsonify({"error": "Description snippet is required."}), 400
+
+    print(f"  -> Received snippet to expand. Sending to Gemini...")
+
+    prompt = f"""
+    Based on the following job description snippet, please expand it into a plausible, well-formatted, and detailed job description of about 3-4 paragraphs.
+    Elaborate on the likely duties, qualifications, and company culture implied by the snippet.
+    Do not invent wildly different responsibilities. The tone should be professional.
+    Do not include a title or company name in your response, only the expanded description text.
+
+    Snippet: "{snippet}"
+
+    Expanded Description:
+    """
+
+    try:
+        response = model.generate_content(prompt)
+        expanded_description = response.text.strip()
+        print("  -> Successfully expanded description with AI.")
+        return jsonify({"full_description": expanded_description})
+    except Exception as e:
+        print(f"  -> Gemini API error during expansion: {e}")
+        return jsonify({"full_description": snippet})
 
 
 if __name__ == '__main__':
