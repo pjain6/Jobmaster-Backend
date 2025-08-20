@@ -1,21 +1,22 @@
 # app.py
-# GEMINI AI-POWERED VERSION V3
-# This server now fetches multiple pages from Adzuna and sorts by relevance.
+# AGGREGATOR VERSION - CORRECTED
+# This server calls the powerful JobsPikr API and correctly imports the function.
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import google.generativeai as genai
 import json
 import os
-import time
 
-from scraper import fetch_jobs_from_api, ADZUNA_APP_ID, ADZUNA_APP_KEY
+# --- THIS IS THE FIX ---
+# We now import the correct function name from scraper.py
+from scraper import fetch_jobspikr_jobs
 
 app = Flask(__name__)
 CORS(app)
 
 # --- CONFIGURE GEMINI API ---
-GEMINI_API_KEY = "AIzaSyBbJrZZa7LFRyLdDYcn0d2mDVgLY1i8XB4"
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyBbJrZZa7LFRyLdDYcn0d2mDVgLY1i8XB4")
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel('gemini-1.5-flash')
 
@@ -56,8 +57,8 @@ def parse_query_with_ai(query):
 @app.route('/api/search', methods=['GET'])
 def search_jobs():
     """
-    Handles a search request by analyzing the query with AI, fetching multiple pages
-    of results, and returning them sorted by relevance.
+    Handles a search request by analyzing the query with AI, then calling the 
+    JobsPikr job aggregator to get comprehensive, live results.
     """
     query = request.args.get('q', '').lower()
     
@@ -67,41 +68,15 @@ def search_jobs():
     print(f"Received live search query: '{query}'.")
     ai_structured_query = parse_query_with_ai(query)
     
-    role_query = ai_structured_query.get("role")
-    location_query = ai_structured_query.get("location")
-    salary_query = ai_structured_query.get("salary_min")
-    experience_query = ai_structured_query.get("experience_level")
+    # --- THIS IS THE FIX ---
+    # We now call the correct function.
+    live_jobs = fetch_jobspikr_jobs(ai_structured_query)
     
-    if not role_query:
-        role_query = query
-        
-    all_jobs = []
-    # --- PAGINATION LOGIC ---
-    # Fetch up to 5 pages of results to get a large pool of jobs.
-    for page_num in range(1, 6):
-        print(f"Fetching page {page_num}...")
-        jobs_on_page = fetch_jobs_from_api(
-            role_query, 
-            location=location_query, 
-            salary_min=salary_query,
-            experience=experience_query,
-            page=page_num
-        )
-        if jobs_on_page:
-            all_jobs.extend(jobs_on_page)
-        else:
-            # Stop if a page returns no results
-            break
-        time.sleep(0.5) # Be polite to the API
-
-    # Remove duplicates
-    unique_jobs = list({job['id']: job for job in all_jobs}.values())
-    
-    print(f"Found {len(unique_jobs)} unique jobs from Adzuna API.")
-    return jsonify(unique_jobs)
+    print(f"Found {len(live_jobs)} jobs from JobsPikr.")
+    return jsonify(live_jobs)
 
 
-# --- NEW AI ENDPOINT FOR EXPANDING DESCRIPTIONS ---
+# --- AI ENDPOINT FOR EXPANDING DESCRIPTIONS ---
 @app.route('/api/job/expand', methods=['POST'])
 def expand_job_description():
     """
