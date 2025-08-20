@@ -1,75 +1,55 @@
 # scraper.py
-# FINAL, PRODUCTION-READY VERSION
-# Uses the Adzuna Job Board API for reliable, structured data.
+# This file now contains the client function for the JobsPikr API.
 
 import requests
 import json
+import os
 
-# --- PASTE YOUR ADZUNA API CREDENTIALS HERE ---
-ADZUNA_APP_ID = "96373f58"
-ADZUNA_APP_KEY = "63d4d6ca5bf5353fcaf2398c68bd8433"
+# --- API CREDENTIALS ---
+# This will be stored as an Environment Variable on Render
+JOBSPIKR_API_KEY = os.environ.get("JOBSPIKR_API_KEY", "uF43fN8RnG_3zmGiMOtiwfk24DaickrENAYjuRZ2OTc")
 
-def fetch_jobs_from_api(query, location=None, salary_min=None, experience=None, page=1):
+
+def fetch_jobspikr_jobs(query_data):
     """
-    Fetches job listings from the Adzuna API, now with salary and experience filtering.
+    Fetches job listings from the JobsPikr Real-Time API.
     """
-    print(f"  -> Sending request for '{query}' in '{location or 'anywhere'}' to Adzuna API...")
-
-    # Adzuna API endpoint details
-    url_endpoint = f"http://api.adzuna.com/v1/api/jobs/us/search/{page}"
+    print(f"  -> Querying JobsPikr API for: {query_data}")
     
+    # This is a standard endpoint structure for a service like JobsPikr.
+    # You may need to adjust it based on their specific documentation.
+    url = "https://api.jobspikr.com/v2/jobs"
+    
+    # Construct the payload for the API based on our AI's analysis
     params = {
-        'app_id': ADZUNA_APP_ID,
-        'app_key': ADZUNA_APP_KEY,
-        'what': query,
-        'results_per_page': 50, # Get a good number of results
-        'content-type': 'application/json'
+        "api_key": JOBSPIKR_API_KEY,
+        "query": query_data.get("role", ""),
+        "location": query_data.get("location", ""),
+        "size": 100 # Fetch up to 100 results
     }
 
-    # --- ADDING THE NEW FILTERS ---
-    if location:
-        params['where'] = location
-    if salary_min:
-        params['salary_min'] = salary_min
-    if experience and experience in ['entry-level', 'junior']:
-        # Adzuna's experience filtering is limited. A more complex system might use
-        # keywords in the 'what' query, but for now, we add the parameter if present.
-        # This demonstrates how the AI's output is used.
-        params['what_and'] = experience # Adds the experience level as a required keyword
-
     try:
-        response = requests.get(url_endpoint, params=params)
-        response.raise_for_status() # Raise an exception for bad status codes
+        # Make the API call
+        response = requests.get(url, params=params)
+        response.raise_for_status()
         
-        data = response.json()
-        api_results = data.get('results', [])
+        api_results = response.json().get('jobs', [])
 
         jobs_list = []
         for job_data in api_results:
-            # Map the Adzuna API response to our application's job format
+            # Normalize the data to our app's format
             job = {
                 "id": job_data.get('id'),
                 "title": job_data.get('title'),
-                "company": job_data.get('company', {}).get('display_name', 'N/A'),
-                "location": job_data.get('location', {}).get('display_name', 'N/A'),
-                "salary": "N/A", # Salary data can be complex in Adzuna, keeping it simple for now
-                "description": job_data.get('description', 'See original posting for details.'),
-                "link": job_data.get('redirect_url')
+                "company": job_data.get('company_name', 'N/A'),
+                "location": job_data.get('location_normalized', 'N/A'),
+                "description": job_data.get('job_description_html', 'See original posting.'), # Use the full description
+                "link": job_data.get('job_url')
             }
             jobs_list.append(job)
-        
         return jobs_list
-
-    except requests.exceptions.HTTPError as http_err:
-        print(f"  -> HTTP error occurred: {http_err}")
-        return []
+        
     except Exception as e:
-        print(f"  -> An unexpected error occurred: {e}")
+        print(f"  -> JobsPikr API error: {e}")
         return []
 
-# The main block below is no longer used by the live server, but is kept for manual data fetching.
-if __name__ == '__main__':
-    if ADZUNA_APP_ID == "YOUR_APP_ID_HERE" or ADZUNA_APP_KEY == "YOUR_APP_KEY_HERE":
-        print("\nERROR: Please paste your Adzuna App ID and App Key into the scraper.py file.\n")
-    else:
-        print("This script is now intended to be used by app.py. To run a manual fetch, you would call the functions directly.")
